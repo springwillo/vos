@@ -12,7 +12,7 @@ import argparse
 import random
 import matplotlib as mpl
 
-
+# 创建命令行解析器
 parser = argparse.ArgumentParser(description='Tunes a CIFAR Classifier with OE',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
@@ -23,39 +23,47 @@ parser.add_argument('--train_epoch', type=int, default=3000)
 
 args = parser.parse_args()
 
+# 设置模型保存路径
 save_path = f'./results/{args.train_scheme}.pth' 
-gap = 12 
-warmup_num=20
-learning_rate =  0.5
-variance =0.25
-data_num = 500 
-class_num =3 
-input_dim = 2
-positive_limit = 16
+gap = 12  #数据点之间的间隔
+warmup_num=20 #学习率 warmup 的 epoch 数
+learning_rate =  0.5 # 初始学习率
+variance =0.25  # 数据点分布的方差
+data_num = 500 # 每个类别的数据点数量
+class_num =3 # 类别数量
+input_dim = 2 # 输入维度
+positive_limit = 16  # 数据点的正负限制
 
+# 每个类别的训练数据数量
 train_data_num  =  [data_num for _ in range(class_num)] 
-batch_size = sum(train_data_num) 
+batch_size = sum(train_data_num)  # 批处理大小
 
+# 数据点的中心位置
 gap_list = [0, - gap/2, gap/2 ]
 y_center = [gap /np.sqrt(3), - gap /np.sqrt(3)/2, - gap /np.sqrt(3)/2]
 
-
+# 生成训练数据
 train_data, train_label = generate_data(batch_size,input_dim, class_num, gap_list,y_center, variance, train_data_num )
 
-
+# 创建模型
 model_vanilia = MLP(input_dim, class_num)
 
+# 如果是评估模式，则加载模型
 if args.eval_model:
     model_vanilia.load_state_dict(torch.load(save_path))
     model_vanilia.to(args.device)
 else:
-    sigmoid = torch.nn.Sigmoid()
-    train_data_normal = train_data / positive_limit
+     # 如果是训练模式，则设置优化器和数据加载器
+    sigmoid = torch.nn.Sigmoid() # 创建sigmoid激活函数，用于后续计算
+    train_data_normal = train_data / positive_limit # 对训练数据进行归一化
+    # 如果采用vos训练方案
     if args.train_scheme == 'vos':
         optimizer_vanilia = optim.SGD(model_vanilia.parameters() ,lr=learning_rate,weight_decay=0)
-        outlier = np.random.random((class_num* data_num,2)) * 2 * positive_limit  - positive_limit
-        p_outlier =  0.000000000000000000000005   #  0.000000000000000000000005 
-        outlier = remove_2d_outlier(outlier, p_outlier, gap_list ,y_center , [variance for _ in range(class_num)], positive_limit)
+        # 生成异常值数据
+        outlier = np.random.random((class_num* data_num,2)) * 2 * positive_limit  - positive_limit  # 随机生成异常值数据
+        p_outlier =  0.000000000000000000000005   #  0.000000000000000000000005  # 设置异常值的概率阈值
+        outlier = remove_2d_outlier(outlier, p_outlier, gap_list ,y_center , [variance for _ in range(class_num)], positive_limit) # 过滤掉不符合条件的异常值
+        # 创建异常值标签
         outlier_label = torch.cat((torch.ones(len(outlier)), torch.zeros(len(outlier))), 0)
         outlier_label = torch.unsqueeze(outlier_label, 1).float() 
         outlier_train_data = (torch.from_numpy(outlier)).float()
@@ -150,11 +158,15 @@ alpha_value = 0.1
 height_location = 11
 font_size= 27 
 
-fig = plt.figure()
-ax = fig.add_subplot(111)
-plt.contourf(x,  y, - Energy_test_vanilia, 500  , cmap=mpl.colormaps['Purples'], linestyles = 'dashed')
-cb = plt.colorbar()
-plt.setp(cb.ax.get_yticklabels(), visible=False)
+fig = plt.figure() # 创建一个新的图像窗口。
+ax = fig.add_subplot(111) # 在图像中添加一个子图，这里111表示图像应该是1x1网格中的第一个图。
+plt.contourf(x,  y, - Energy_test_vanilia, 500  , cmap=mpl.colormaps['Purples'], linestyles = 'dashed') 
+# 使用x和y的数据绘制一个等高线图，其中-Energy_test_vanilia定义了等高线的值，500是等高线的数量，
+# cmap指定了颜色映射（这里使用紫色调），linestyles指定了等高线的线型为虚线。
+
+plt.text(height_location, -18, 'Low ID score',  fontdict={'family' : 'Times New Roman', 'size'   : font_size})  
+cb = plt.colorbar() 
+plt.setp(cb.ax.get_yticklabels(), visible=False) # 隐藏颜色条上的y轴刻度标签。
 plt.text(height_location, 17, 'High ID score',  fontdict={'family' : 'Times New Roman', 'size'   : font_size}) 
 plt.text(height_location, -18, 'Low ID score',  fontdict={'family' : 'Times New Roman', 'size'   : font_size}) 
 plt.xticks([])
